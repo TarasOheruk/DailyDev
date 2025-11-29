@@ -105,7 +105,7 @@ This row has an empty passenger_count, which is required (non-null TINYINT), so 
 ---
 
 
-#(9) Handling 10GB CSV input — what I would change
+# (9) Handling 10GB CSV input — what I would change
 
 In the current implementation, the program processes the CSV in a streaming manner (row-by-row), cleans each record, detects duplicates using an in-memory HashSet, and performs batch inserts using SqlBulkCopy.
 This approach already scales reasonably well for moderately large files because it does not load the entire CSV into memory.
