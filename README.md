@@ -29,10 +29,12 @@ The implementation is designed with scalability and unsafe input in mind.
 
 Database name: `CabTripsDb`  
 Table name: `dbo.Trips`
-all scripts in SQLQuery1.sql file
+All scripts in SQLQuery1.sql file
+
+---
 
 ## Running the project locally
-1. Prerequisites
+- 1. Prerequisites
 
 .NET 8 SDK
 
@@ -40,7 +42,7 @@ SQL Server (local instance or remote)
 
 A database created using the SQL script
 
-2. Configure the connection string
+- 2. Configure the connection string
 
 In Program.cs:
 
@@ -53,7 +55,7 @@ or with SQL authentication:
 private const string ConnectionString =
     "Server=YOUR_SERVER_NAME;Database=CabTripsDb;User Id=USERNAME;Password=PASSWORD;TrustServerCertificate=True;";
 
-3. Run ETL
+- 3. Run ETL
 
 You can either pass the CSV path as a command-line argument:
 
@@ -63,7 +65,7 @@ dotnet run -- "C:\data\sample-cab-data.csv"
 or run without arguments and enter the path when prompted:
 
 dotnet run
-# Enter path to CSV file: C:\data\sample-cab-data.csv
+Enter path to CSV file: C:\data\sample-cab-data.csv
 
 
 After the run finishes:
@@ -76,7 +78,10 @@ To verify row count:
 
 SELECT COUNT(*) FROM CabTripsDb.dbo.Trips;
 
-##Results (for the provided 30,000-row sample)
+---
+
+
+## Results (for the provided 30,000-row sample)
 
 For the input file containing 30,000 rows:
 
@@ -96,4 +101,26 @@ VendorID	tpep_pickup_datetime	tpep_dropoff_datetime	passenger_count	trip_distanc
 
 
 This row has an empty passenger_count, which is required (non-null TINYINT), so it is treated as invalid and skipped.
+
+---
+
+
+#(9) Handling 10GB CSV input — what I would change
+
+In the current implementation, the program processes the CSV in a streaming manner (row-by-row), cleans each record, detects duplicates using an in-memory HashSet, and performs batch inserts using SqlBulkCopy.
+This approach already scales reasonably well for moderately large files because it does not load the entire CSV into memory.
+
+For a 10GB input file, I would introduce several architectural adjustments:
+
+- Move deduplication to the database (staging table + ROW_NUMBER() or a MERGE with a unique constraint) to avoid storing millions of composite keys in RAM, which would not scale.
+
+- Partition the target table by pickup date (e.g., monthly partitions) to keep analytical queries fast and reduce index maintenance costs on very large datasets.
+
+- Implement parallel loaders, splitting the source file into smaller chunks processed by multiple workers writing into separate staging tables, followed by a consolidation step.
+
+- Add robust logging and monitoring, including row-per-second metrics, retry logic for transient SQL errors, and progress checkpoints to resume long imports.
+
+- Optionally use bulk-insert directly from disk (BULK INSERT / OPENROWSET(BULK ...)) if allowed, offloading parsing to SQL Server for even higher throughput.
+
+In summary, the current pipeline works well for tens or hundreds of MB, but for 10GB+ workloads the deduplication strategy, table design, and parallelism model must be upgraded to avoid memory bottlenecks and ensure predictable performance.
 
